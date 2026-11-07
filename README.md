@@ -34,6 +34,7 @@
 
 - **Clipboard uploads** — paste an image, copy its public link, and choose when to send it.
 - **Chat previews** — see inline image thumbnails, with filters for usernames, domains, and bots.
+- **Stream delay catch-up** — play up to 4% faster when a live stream falls behind, without changing resolution.
 - **Image viewer** — open chat images full-screen, zoom up to 800%, and pan without leaving the page.
 - **Local image editor** — crop, draw, rotate, or flip an uploaded image, then upload the edited version.
 
@@ -97,11 +98,12 @@ Click the **VC** button next to the account controls in the Twitch top navigatio
 ![Viewer Companion General settings with chat previews, preview click behavior, and automatic link insertion controls](public/screenshots/settings-general.png)
 
 <details>
-<summary><strong>General — previews and automatic link insertion</strong></summary>
+<summary><strong>General — previews, automatic link insertion, and delay catch-up</strong></summary>
 
 - **Preview links in chat** — show thumbnails below chat messages. Turning it off removes existing previews and stops image/metadata requests for chat links.
 - **Clicking a chat preview** — **Open viewer** (default) enlarges the image on the page; **Open website** keeps the normal link behavior and opens the linked page in a new tab. Modifier-clicks always retain normal link behavior.
 - **Auto-insert uploaded links** — after a successful upload, add the link to the unsent chat message at the caret where you pasted. When insertion succeeds, the upload panel stays open until you send the message. This is off by default and never sends the message. If the draft changed, a different field has focus, or the page navigated during the upload, the link is not inserted and the panel stays open.
+- **Catch up stream delay** — on by default for live streams. When playback falls more than 4 seconds behind the live edge, the player runs 2-4% faster (at most 1.04x) until the gap closes to about 1.5 seconds, then returns to normal speed. Only the playback rate changes; resolution and audio pitch stay the same. VODs, clips, ads, and paused videos are never affected.
 
 </details>
 

@@ -201,6 +201,7 @@ function describeSettings(settings: Settings): string {
   return [
     settings.chatPreviews ? "previews on" : "previews off",
     settings.autoInsert ? "auto-insert on" : "auto-insert off",
+    settings.catchUpLatency ? "delay catch-up on" : "delay catch-up off",
     settings.previewClick === "viewer" ? "viewer clicks" : "website clicks",
     settings.hideBots ? "bot previews hidden" : "bot previews shown",
     count(settings.blockedUsers.length, "username", "usernames"),
@@ -410,6 +411,13 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
     settings.get().autoInsert,
     (checked) => settings.update({ autoInsert: checked }),
   );
+  const catchUpLatency = toggleRow(
+    doc,
+    "Catch up stream delay",
+    "When the live stream falls more than 4 seconds behind, play 2-4% faster (up to 1.04x) until it catches up. Resolution and audio pitch are unchanged.",
+    settings.get().catchUpLatency,
+    (checked) => settings.update({ catchUpLatency: checked }),
+  );
 
   const fieldset = doc.createElement("fieldset");
   fieldset.disabled = !settings.get().chatPreviews;
@@ -490,7 +498,7 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
   const previewSettings = doc.createElement("div");
   previewSettings.className = "preview-settings";
   previewSettings.append(previews.row, fieldset);
-  tabPanels[0]!.append(previewSettings, autoInsert.row);
+  tabPanels[0]!.append(previewSettings, autoInsert.row, catchUpLatency.row);
   tabPanels[1]!.append(bots.row, users.label, domains.label);
   const accountsBeta = doc.createElement("p");
   accountsBeta.id = "settings-accounts-beta";
@@ -661,6 +669,7 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
     previews.input.checked = next.chatPreviews;
     fieldset.disabled = !next.chatPreviews;
     autoInsert.input.checked = next.autoInsert;
+    catchUpLatency.input.checked = next.catchUpLatency;
     bots.input.checked = next.hideBots;
     users.sync(next.blockedUsers);
     domains.sync(next.blockedDomains);

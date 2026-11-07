@@ -7,6 +7,7 @@ import { createPreviewPageResolver, type PreviewPageReply } from "../preview-pag
 import { createSettings } from "../settings";
 import { createExtensionSettingsStore, watchExtensionSettings } from "../extension-settings";
 import { createExtensionAccounts } from "../extension-accounts";
+import { registerLatencyCatcher } from "../latency";
 
 export default defineContentScript({
   matches: SITE_MATCHES,
@@ -15,6 +16,7 @@ export default defineContentScript({
   main() {
     const settings = createSettings(createExtensionSettingsStore());
     watchExtensionSettings(settings);
+    registerLatencyCatcher(settings);
     registerPasteHandler(
       async (image) => {
         const message: UploadMessage = { type: "upload-image", image };

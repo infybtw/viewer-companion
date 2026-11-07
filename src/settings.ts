@@ -5,6 +5,7 @@ export type PreviewClick = "viewer" | "site";
 export interface Settings {
   chatPreviews: boolean;
   autoInsert: boolean;
+  catchUpLatency: boolean;
   previewClick: PreviewClick;
   blockedUsers: string[];
   blockedDomains: string[];
@@ -14,6 +15,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   chatPreviews: true,
   autoInsert: false,
+  catchUpLatency: true,
   previewClick: "viewer",
   blockedUsers: [],
   blockedDomains: [],
@@ -30,6 +32,10 @@ export function normalizeSettings(value: unknown): Settings {
         : DEFAULT_SETTINGS.chatPreviews,
     autoInsert:
       typeof stored.autoInsert === "boolean" ? stored.autoInsert : DEFAULT_SETTINGS.autoInsert,
+    catchUpLatency:
+      typeof stored.catchUpLatency === "boolean"
+        ? stored.catchUpLatency
+        : DEFAULT_SETTINGS.catchUpLatency,
     previewClick: stored.previewClick === "site" ? "site" : "viewer",
     blockedUsers: normalizeUserList(stored.blockedUsers),
     blockedDomains: normalizeDomainList(stored.blockedDomains),
@@ -57,6 +63,7 @@ function sameSettings(first: Settings, second: Settings): boolean {
   return (
     first.chatPreviews === second.chatPreviews &&
     first.autoInsert === second.autoInsert &&
+    first.catchUpLatency === second.catchUpLatency &&
     first.previewClick === second.previewClick &&
     first.hideBots === second.hideBots &&
     JSON.stringify(first.blockedUsers) === JSON.stringify(second.blockedUsers) &&
