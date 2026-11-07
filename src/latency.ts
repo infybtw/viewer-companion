@@ -1,7 +1,7 @@
-import type { SettingsController } from "./settings";
+import { DEFAULT_SETTINGS, type SettingsController } from "./settings";
 
-/** Start catching up once the live edge is at least this far ahead. */
-export const LATENCY_START_SECONDS = 4;
+/** Default start delay; the user can change it in settings. */
+export const LATENCY_START_SECONDS = DEFAULT_SETTINGS.latencyThresholdSeconds;
 /** Stop catching up near live so playback keeps a small buffer. */
 export const LATENCY_STOP_SECONDS = 1.5;
 /** Smallest speedup: 2% at the threshold. */
@@ -54,13 +54,14 @@ export function liveDelaySeconds(video: LatencyVideo): number | null {
  * at least a 2% speedup until the delay drops to LATENCY_STOP_SECONDS, which
  * avoids rapid on/off cycling around the threshold.
  */
-export function catchUpPlaybackRate(delay: number, catchingUp: boolean): number {
+export function catchUpPlaybackRate(
+  delay: number,
+  catchingUp: boolean,
+  startSeconds: number = LATENCY_START_SECONDS,
+): number {
   if (!Number.isFinite(delay) || delay <= LATENCY_STOP_SECONDS) return 1;
-  if (!catchingUp && delay < LATENCY_START_SECONDS) return 1;
-  const progress = Math.min(
-    Math.max((delay - LATENCY_START_SECONDS) / LATENCY_FULL_SPEED_SECONDS, 0),
-    1,
-  );
+  if (!catchingUp && delay < startSeconds) return 1;
+  const progress = Math.min(Math.max((delay - startSeconds) / LATENCY_FULL_SPEED_SECONDS, 0), 1);
   const rate = LATENCY_MIN_RATE + (LATENCY_MAX_RATE - LATENCY_MIN_RATE) * progress;
   return Math.round(rate * 1000) / 1000;
 }
@@ -84,6 +85,7 @@ export function registerLatencyCatcher(
 
   const applied = new Map<HTMLVideoElement, AppliedRate>();
   let stopped = false;
+  let latencyThreshold = settings.get().latencyThresholdSeconds;
 
   const restore = (video: HTMLVideoElement) => {
     const entry = applied.get(video);
@@ -103,7 +105,7 @@ export function registerLatencyCatcher(
     for (const video of [...applied.keys()]) restore(video);
   };
 
-  const sync = (video: HTMLVideoElement) => {
+  const sync = (video: HTMLVideoElement, startSeconds: number) => {
     if (video.paused || video.ended) {
       restore(video);
       return;
@@ -114,7 +116,7 @@ export function registerLatencyCatcher(
       return;
     }
     const current = applied.get(video);
-    const rate = catchUpPlaybackRate(delay, current !== undefined);
+    const rate = catchUpPlaybackRate(delay, current !== undefined, startSeconds);
     if (rate === 1) {
       restore(video);
       return;
@@ -136,15 +138,23 @@ export function registerLatencyCatcher(
 
   const tick = () => {
     if (stopped) return;
-    if (!settings.get().catchUpLatency) {
+    const current = settings.get();
+    if (!current.catchUpLatency) {
       restoreAll();
+      latencyThreshold = current.latencyThresholdSeconds;
       return;
+    }
+    if (current.latencyThresholdSeconds !== latencyThreshold) {
+      // A new threshold should take effect immediately instead of waiting for
+      // the previous catch-up cycle to reach the stop point.
+      latencyThreshold = current.latencyThresholdSeconds;
+      restoreAll();
     }
     const videos = doc.querySelectorAll("video");
     const seen = new Set<HTMLVideoElement>();
     for (const video of videos) {
       seen.add(video);
-      sync(video);
+      sync(video, current.latencyThresholdSeconds);
     }
     for (const video of [...applied.keys()]) {
       if (!seen.has(video)) restore(video);

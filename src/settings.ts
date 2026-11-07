@@ -2,10 +2,14 @@ import { normalizeDomainList, normalizeUserList } from "./preview-filters";
 
 export type PreviewClick = "viewer" | "site";
 
+export const MIN_LATENCY_THRESHOLD_SECONDS = 1;
+export const MAX_LATENCY_THRESHOLD_SECONDS = 60;
+
 export interface Settings {
   chatPreviews: boolean;
   autoInsert: boolean;
   catchUpLatency: boolean;
+  latencyThresholdSeconds: number;
   previewClick: PreviewClick;
   blockedUsers: string[];
   blockedDomains: string[];
@@ -16,11 +20,21 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   chatPreviews: true,
   autoInsert: false,
   catchUpLatency: true,
+  latencyThresholdSeconds: 4,
   previewClick: "viewer",
   blockedUsers: [],
   blockedDomains: [],
   hideBots: true,
 });
+
+export function normalizeLatencyThreshold(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value))
+    return DEFAULT_SETTINGS.latencyThresholdSeconds;
+  return Math.min(
+    MAX_LATENCY_THRESHOLD_SECONDS,
+    Math.max(MIN_LATENCY_THRESHOLD_SECONDS, Math.round(value)),
+  );
+}
 
 export function normalizeSettings(value: unknown): Settings {
   const stored =
@@ -36,6 +50,7 @@ export function normalizeSettings(value: unknown): Settings {
       typeof stored.catchUpLatency === "boolean"
         ? stored.catchUpLatency
         : DEFAULT_SETTINGS.catchUpLatency,
+    latencyThresholdSeconds: normalizeLatencyThreshold(stored.latencyThresholdSeconds),
     previewClick: stored.previewClick === "site" ? "site" : "viewer",
     blockedUsers: normalizeUserList(stored.blockedUsers),
     blockedDomains: normalizeDomainList(stored.blockedDomains),
@@ -64,6 +79,7 @@ function sameSettings(first: Settings, second: Settings): boolean {
     first.chatPreviews === second.chatPreviews &&
     first.autoInsert === second.autoInsert &&
     first.catchUpLatency === second.catchUpLatency &&
+    first.latencyThresholdSeconds === second.latencyThresholdSeconds &&
     first.previewClick === second.previewClick &&
     first.hideBots === second.hideBots &&
     JSON.stringify(first.blockedUsers) === JSON.stringify(second.blockedUsers) &&

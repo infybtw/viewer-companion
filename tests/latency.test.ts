@@ -70,12 +70,19 @@ describe("catch-up playback rate", () => {
     expect(catchUpPlaybackRate(1.4, true)).toBe(1);
     expect(catchUpPlaybackRate(Number.NaN, true)).toBe(1);
   });
+
+  test("respects a custom start threshold", () => {
+    expect(catchUpPlaybackRate(5.9, false, 6)).toBe(1);
+    expect(catchUpPlaybackRate(6, false, 6)).toBe(LATENCY_MIN_RATE);
+    expect(catchUpPlaybackRate(10, false, 6)).toBe(LATENCY_MAX_RATE);
+    expect(catchUpPlaybackRate(3, true, 6)).toBe(LATENCY_MIN_RATE);
+  });
 });
 
 describe("latency catcher", () => {
   type MutableVideo = { -readonly [Key in keyof LatencyVideo]: LatencyVideo[Key] };
 
-  function harness(initialRate = 1) {
+  function harness(initialRate = 1, latencyThresholdSeconds = 4) {
     const element = {
       ...video(10, 14),
       playbackRate: initialRate,
@@ -91,7 +98,7 @@ describe("latency catcher", () => {
     } as unknown as Window & { top: unknown };
     win.top = win;
     const settings = createSettings({
-      load: () => ({ catchUpLatency: true }),
+      load: () => ({ catchUpLatency: true, latencyThresholdSeconds }),
       save: () => {},
     });
     const stop = registerLatencyCatcher(settings, doc, win);
@@ -117,6 +124,16 @@ describe("latency catcher", () => {
     expect(test.element.playbackRate).toBe(LATENCY_MIN_RATE);
     test.settings.update({ catchUpLatency: false });
     expect(test.element.playbackRate).toBe(1.5);
+    test.stop();
+  });
+
+  test("uses the configured start threshold", async () => {
+    const test = harness(1, 6);
+    await test.settings.ready;
+    expect(test.element.playbackRate).toBe(1);
+    test.element.currentTime = 8; // 6 seconds behind the edge.
+    test.tick();
+    expect(test.element.playbackRate).toBe(LATENCY_MIN_RATE);
     test.stop();
   });
 });

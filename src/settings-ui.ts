@@ -1,4 +1,9 @@
-import type { Settings, SettingsController } from "./settings";
+import {
+  MAX_LATENCY_THRESHOLD_SECONDS,
+  MIN_LATENCY_THRESHOLD_SECONDS,
+  type Settings,
+  type SettingsController,
+} from "./settings";
 import { BRAND_NAME, createBrandIcon } from "./brand";
 import type { Accounts } from "./accounts";
 import { createAccountsUi } from "./accounts-ui";
@@ -187,6 +192,49 @@ function toggleRow(
   return { row, input };
 }
 
+function numberRow(
+  doc: Document,
+  title: string,
+  description: string,
+  read: () => number,
+  min: number,
+  max: number,
+  onChange: (value: number) => void,
+) {
+  const row = doc.createElement("label");
+  row.className = "row";
+  const copy = doc.createElement("span");
+  copy.className = "copy";
+  const label = doc.createElement("strong");
+  label.textContent = title;
+  const hint = doc.createElement("small");
+  hint.textContent = description;
+  copy.append(label, hint);
+  const input = doc.createElement("input");
+  input.type = "number";
+  input.className = "number";
+  input.min = String(min);
+  input.max = String(max);
+  input.step = "1";
+  input.inputMode = "numeric";
+  input.value = String(read());
+  input.setAttribute("aria-label", title);
+  const commit = (rewrite: boolean) => {
+    const parsed = Number(input.value);
+    if (!input.value.trim() || !Number.isFinite(parsed)) {
+      if (rewrite) input.value = String(read());
+      return;
+    }
+    const next = Math.min(max, Math.max(min, Math.round(parsed)));
+    if (next !== read()) onChange(next);
+    if (rewrite) input.value = String(next);
+  };
+  input.addEventListener("input", () => commit(false));
+  input.addEventListener("change", () => commit(true));
+  row.append(copy, input);
+  return { row, input };
+}
+
 function actionButton(doc: Document, label: string, primary = false) {
   const button = doc.createElement("button");
   button.type = "button";
@@ -201,7 +249,9 @@ function describeSettings(settings: Settings): string {
   return [
     settings.chatPreviews ? "previews on" : "previews off",
     settings.autoInsert ? "auto-insert on" : "auto-insert off",
-    settings.catchUpLatency ? "delay catch-up on" : "delay catch-up off",
+    settings.catchUpLatency
+      ? `delay catch-up on at ${settings.latencyThresholdSeconds}s`
+      : "delay catch-up off",
     settings.previewClick === "viewer" ? "viewer clicks" : "website clicks",
     settings.hideBots ? "bot previews hidden" : "bot previews shown",
     count(settings.blockedUsers.length, "username", "usernames"),
@@ -243,6 +293,8 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
     .tab-panel { display: flex; flex-direction: column; gap: 24px; }
     .preview-settings { display: flex; flex-direction: column; gap: 16px; }
     .row { display: flex; align-items: center; gap: 16px; min-height: 44px; cursor: pointer; }
+    .latency-settings { display: flex; flex-direction: column; }
+    .sub-row { margin-left: 12px; padding-left: 16px; border-left: 2px solid #3f3f46; }
     .copy { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
     .copy strong { font-size: 13px; font-weight: 500; }
     .copy small, .list small { color: #a1a1aa; font-size: 12px; line-height: 1.5; }
@@ -263,6 +315,11 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
     fieldset:disabled legend, fieldset:disabled label { color: #a1a1aa; cursor: default; }
     .list { display: flex; flex-direction: column; gap: 4px; }
     .list span { font-weight: 500; }
+    .number { flex: 0 0 auto; width: 72px; min-height: 32px; padding: 4px 8px;
+      border: 1px solid #52525b; border-radius: 6px; background: #09090b; color: #fafafa;
+      font: 13px/1.5 system-ui, sans-serif; text-align: right; }
+    .number:hover { border-color: #71717a; }
+    .number:focus-visible { outline: 2px solid #a78bfa; outline-offset: 1px; }
     textarea { width: 100%; min-height: 80px; resize: vertical; margin-top: 4px; padding: 8px 12px;
       border: 1px solid #52525b; border-radius: 6px; background: #09090b; color: #fafafa;
       caret-color: #a78bfa; font: 13px/1.5 system-ui, sans-serif; }
@@ -414,10 +471,25 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
   const catchUpLatency = toggleRow(
     doc,
     "Catch up stream delay",
-    "When the live stream falls more than 4 seconds behind, play 2-4% faster (up to 1.04x) until it catches up. Resolution and audio pitch are unchanged.",
+    "When the live stream falls behind, play 2-4% faster (up to 1.04x) until it catches up. Resolution and audio pitch are unchanged.",
     settings.get().catchUpLatency,
     (checked) => settings.update({ catchUpLatency: checked }),
   );
+  const latencyThreshold = numberRow(
+    doc,
+    "Start catch-up after",
+    "Seconds behind the live edge before playback starts speeding up. Lower values keep you closer to live but may reduce the buffer.",
+    () => settings.get().latencyThresholdSeconds,
+    MIN_LATENCY_THRESHOLD_SECONDS,
+    MAX_LATENCY_THRESHOLD_SECONDS,
+    (value) => settings.update({ latencyThresholdSeconds: value }),
+  );
+  latencyThreshold.row.classList.add("sub-row");
+  latencyThreshold.row.hidden = !settings.get().catchUpLatency;
+  latencyThreshold.input.disabled = !settings.get().catchUpLatency;
+  const latencySettings = doc.createElement("div");
+  latencySettings.className = "latency-settings";
+  latencySettings.append(catchUpLatency.row, latencyThreshold.row);
 
   const fieldset = doc.createElement("fieldset");
   fieldset.disabled = !settings.get().chatPreviews;
@@ -498,7 +570,7 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
   const previewSettings = doc.createElement("div");
   previewSettings.className = "preview-settings";
   previewSettings.append(previews.row, fieldset);
-  tabPanels[0]!.append(previewSettings, autoInsert.row, catchUpLatency.row);
+  tabPanels[0]!.append(previewSettings, autoInsert.row, latencySettings);
   tabPanels[1]!.append(bots.row, users.label, domains.label);
   const accountsBeta = doc.createElement("p");
   accountsBeta.id = "settings-accounts-beta";
@@ -670,6 +742,10 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
     fieldset.disabled = !next.chatPreviews;
     autoInsert.input.checked = next.autoInsert;
     catchUpLatency.input.checked = next.catchUpLatency;
+    latencyThreshold.row.hidden = !next.catchUpLatency;
+    latencyThreshold.input.disabled = !next.catchUpLatency;
+    if (root.activeElement !== latencyThreshold.input)
+      latencyThreshold.input.value = String(next.latencyThresholdSeconds);
     bots.input.checked = next.hideBots;
     users.sync(next.blockedUsers);
     domains.sync(next.blockedDomains);

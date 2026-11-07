@@ -103,7 +103,8 @@ Click the **VC** button next to the account controls in the Twitch top navigatio
 - **Preview links in chat** — show thumbnails below chat messages. Turning it off removes existing previews and stops image/metadata requests for chat links.
 - **Clicking a chat preview** — **Open viewer** (default) enlarges the image on the page; **Open website** keeps the normal link behavior and opens the linked page in a new tab. Modifier-clicks always retain normal link behavior.
 - **Auto-insert uploaded links** — after a successful upload, add the link to the unsent chat message at the caret where you pasted. When insertion succeeds, the upload panel stays open until you send the message. This is off by default and never sends the message. If the draft changed, a different field has focus, or the page navigated during the upload, the link is not inserted and the panel stays open.
-- **Catch up stream delay** — on by default for live streams. When playback falls more than 4 seconds behind the live edge, the player runs 2-4% faster (at most 1.04x) until the gap closes to about 1.5 seconds, then returns to normal speed. Only the playback rate changes; resolution and audio pitch stay the same. VODs, clips, ads, and paused videos are never affected.
+- **Catch up stream delay** — on by default for live streams. When playback falls behind the live edge by the configured threshold (4 seconds by default), the player runs 2-4% faster (at most 1.04x) until the gap closes to about 1.5 seconds, then returns to normal speed. Only the playback rate changes; resolution and audio pitch stay the same. VODs, clips, ads, and paused videos are never affected.
+- **Start catch-up after** — choose the delay threshold between 1 and 60 seconds. Shown when catch-up is enabled. Lower values keep you closer to live but leave less buffer before playback starts speeding up.
 
 </details>
 
