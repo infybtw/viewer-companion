@@ -21,6 +21,18 @@ describe("settings validation", () => {
     expect(normalizeSettings({ hideBots: "no" }).hideBots).toBe(true);
   });
 
+  test("normalizes the configurable latency threshold", () => {
+    expect(DEFAULT_SETTINGS.latencyThresholdSeconds).toBe(4);
+    expect(normalizeSettings({ latencyThresholdSeconds: 7 }).latencyThresholdSeconds).toBe(7);
+    expect(normalizeSettings({ latencyThresholdSeconds: 4.6 }).latencyThresholdSeconds).toBe(5);
+    expect(normalizeSettings({ latencyThresholdSeconds: 0 }).latencyThresholdSeconds).toBe(1);
+    expect(normalizeSettings({ latencyThresholdSeconds: 999 }).latencyThresholdSeconds).toBe(60);
+    expect(normalizeSettings({ latencyThresholdSeconds: "5" }).latencyThresholdSeconds).toBe(4);
+    expect(normalizeSettings({ latencyThresholdSeconds: Number.NaN }).latencyThresholdSeconds).toBe(
+      4,
+    );
+  });
+
   test("keeps valid stored values", () => {
     expect(
       normalizeSettings({ chatPreviews: false, autoInsert: true, previewClick: "site" }),
