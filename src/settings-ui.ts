@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp } from "lucide";
 import {
   MAX_LATENCY_THRESHOLD_SECONDS,
   MIN_LATENCY_THRESHOLD_SECONDS,
@@ -21,6 +22,31 @@ export const SETTINGS_PANEL_ATTRIBUTE = "data-imageuploader-settings-panel";
 type Site = "twitch" | "kick";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+type IconNode = typeof ChevronUp;
+
+function iconSvg(doc: Document, icon: IconNode): SVGSVGElement {
+  const svg = doc.createElementNS(SVG_NS, "svg");
+  for (const [name, value] of Object.entries({
+    width: "12",
+    height: "12",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    "stroke-width": "2.5",
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
+    "aria-hidden": "true",
+    focusable: "false",
+  }))
+    svg.setAttribute(name, value);
+  for (const [tag, attributes] of icon) {
+    const child = doc.createElementNS(SVG_NS, tag);
+    for (const [name, value] of Object.entries(attributes)) child.setAttribute(name, String(value));
+    svg.append(child);
+  }
+  return svg;
+}
 
 const TWITCH_ANCHORS = [
   '[data-a-target="user-menu-toggle"]',
@@ -231,8 +257,37 @@ function numberRow(
   };
   input.addEventListener("input", () => commit(false));
   input.addEventListener("change", () => commit(true));
-  row.append(copy, input);
-  return { row, input };
+  const step = (delta: number) => {
+    const parsed = Number(input.value);
+    const base = input.value.trim() && Number.isFinite(parsed) ? Math.round(parsed) : read();
+    const next = Math.min(max, Math.max(min, base + delta));
+    input.value = String(next);
+    if (next !== read()) onChange(next);
+  };
+  const stepButton = (icon: IconNode, delta: number, label: string) => {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "number-step";
+    button.title = `${title}: ${label}`;
+    button.setAttribute("aria-label", `${title}: ${label}`);
+    button.append(iconSvg(doc, icon));
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      step(delta);
+    });
+    return button;
+  };
+  const upButton = stepButton(ChevronUp, 1, "increase");
+  const downButton = stepButton(ChevronDown, -1, "decrease");
+  const stepper = doc.createElement("span");
+  stepper.className = "number-stepper";
+  stepper.append(upButton, downButton);
+  const control = doc.createElement("span");
+  control.className = "number-control";
+  control.append(input, stepper);
+  row.append(copy, control);
+  return { row, input, upButton, downButton };
 }
 
 function actionButton(doc: Document, label: string, primary = false) {
@@ -315,11 +370,24 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
     fieldset:disabled legend, fieldset:disabled label { color: #a1a1aa; cursor: default; }
     .list { display: flex; flex-direction: column; gap: 4px; }
     .list span { font-weight: 500; }
-    .number { flex: 0 0 auto; width: 72px; min-height: 32px; padding: 4px 8px;
+    .number-control { position: relative; display: flex; flex: 0 0 auto; }
+    .number { width: 76px; min-height: 32px; padding: 4px 28px 4px 8px;
       border: 1px solid #52525b; border-radius: 6px; background: #09090b; color: #fafafa;
-      font: 13px/1.5 system-ui, sans-serif; text-align: right; }
+      font: 13px/1.5 system-ui, sans-serif; text-align: right; appearance: textfield;
+      -moz-appearance: textfield; }
+    .number::-webkit-outer-spin-button, .number::-webkit-inner-spin-button {
+      -webkit-appearance: none; margin: 0; }
     .number:hover { border-color: #71717a; }
     .number:focus-visible { outline: 2px solid #a78bfa; outline-offset: 1px; }
+    .number-stepper { position: absolute; top: 1px; right: 1px; bottom: 1px; width: 22px;
+      display: flex; flex-direction: column; border-left: 1px solid #3f3f46; }
+    .number-step { all: unset; box-sizing: border-box; flex: 1; display: grid; place-items: center;
+      color: #a1a1aa; cursor: pointer; }
+    .number-step:first-child { border-bottom: 1px solid #3f3f46; border-radius: 0 5px 0 0; }
+    .number-step:last-child { border-radius: 0 0 5px 0; }
+    .number-step:hover { background: #27272a; color: #fafafa; }
+    .number-step:focus-visible { outline: 2px solid #a78bfa; outline-offset: -2px; }
+    .number-step:disabled { opacity: .45; cursor: default; }
     textarea { width: 100%; min-height: 80px; resize: vertical; margin-top: 4px; padding: 8px 12px;
       border: 1px solid #52525b; border-radius: 6px; background: #09090b; color: #fafafa;
       caret-color: #a78bfa; font: 13px/1.5 system-ui, sans-serif; }
@@ -487,6 +555,8 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
   latencyThreshold.row.classList.add("sub-row");
   latencyThreshold.row.hidden = !settings.get().catchUpLatency;
   latencyThreshold.input.disabled = !settings.get().catchUpLatency;
+  latencyThreshold.upButton.disabled = !settings.get().catchUpLatency;
+  latencyThreshold.downButton.disabled = !settings.get().catchUpLatency;
   const latencySettings = doc.createElement("div");
   latencySettings.className = "latency-settings";
   latencySettings.append(catchUpLatency.row, latencyThreshold.row);
@@ -744,6 +814,8 @@ function buildPanel(doc: Document, settings: SettingsController, accounts?: Acco
     catchUpLatency.input.checked = next.catchUpLatency;
     latencyThreshold.row.hidden = !next.catchUpLatency;
     latencyThreshold.input.disabled = !next.catchUpLatency;
+    latencyThreshold.upButton.disabled = !next.catchUpLatency;
+    latencyThreshold.downButton.disabled = !next.catchUpLatency;
     if (root.activeElement !== latencyThreshold.input)
       latencyThreshold.input.value = String(next.latencyThresholdSeconds);
     bots.input.checked = next.hideBots;
