@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Viewer Companion",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Your Twitch and Kick chat companion: image uploads, inline previews, a full-screen viewer, and a built-in image editor.",
   "permissions": ["storage", "identity"],
   "host_permissions": ["https://*/*", "http://*/*"]
