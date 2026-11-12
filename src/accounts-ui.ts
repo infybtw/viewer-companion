@@ -15,7 +15,7 @@ export function createAccountsUi(doc: Document, accounts?: Accounts) {
   section.append(title, state);
 
   if (!accounts) {
-    state.textContent = "Sign-in requires the Chrome or Firefox extension.";
+    state.textContent = "Sign-in is unavailable in this build.";
     return { section, dispose() {} };
   }
 

@@ -7,6 +7,7 @@ import manifest from "../extension/manifest.json";
 import { uploadImage } from "../src/upload";
 import { UPLOAD_ENDPOINT } from "../src/shared";
 import { TWIR_CLIENT_ID } from "../src/twir-auth";
+import { USERSCRIPT_REDIRECT_URI } from "../src/userscript-auth";
 import {
   createUserscriptFetch,
   type UserscriptRequest,
@@ -35,8 +36,9 @@ describe("Tampermonkey upload transport", () => {
     expect(details.anonymous).toBe(true);
     expect(details.redirect).toBe("error");
     expect(details.headers).toEqual({ Referer: "" });
-    expect([...details.data.keys()]).toEqual(["file"]);
-    const file = details.data.get("file") as File;
+    const data = details.data as FormData;
+    expect([...data.keys()]).toEqual(["file"]);
+    const file = data.get("file") as File;
     expect(file.name).toBe("pasted-image.png");
     expect(file.type).toBe("image/png");
     expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0, 1, 2, 255]);
@@ -121,6 +123,36 @@ describe("Tampermonkey upload transport", () => {
     await expect(uploadImage({}, createUserscriptFetch(request))).rejects.toThrow();
     expect(request).not.toHaveBeenCalled();
   });
+
+  test("supports OAuth form posts with request headers and empty responses", async () => {
+    const url = "https://twir.app/api/oauth/token";
+    const request = mock((details: UserscriptRequestDetails) => {
+      expect(details.url).toBe(url);
+      expect(details.data).toBe("grant_type=refresh_token&client_id=test");
+      expect(details.headers).toEqual({
+        "Content-Type": "application/x-www-form-urlencoded",
+        Referer: "",
+      });
+      details.onload({ status: 200, responseText: '{"ok":true}', finalUrl: url });
+      return { abort() {} };
+    });
+    const fetcher = createUserscriptFetch(request);
+    const response = await fetcher(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "refresh_token", client_id: "test" }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+
+    const revoke = mock((details: UserscriptRequestDetails) => {
+      details.onload({ status: 204, responseText: "", finalUrl: url });
+      return { abort() {} };
+    });
+    const empty = await createUserscriptFetch(revoke)(url, { method: "POST" });
+    expect(empty.status).toBe(204);
+    expect(await empty.text()).toBe("");
+  });
 });
 
 test("userscript is a self-contained installable bundle without extension runtime APIs", async () => {
@@ -154,11 +186,12 @@ test("userscript is a self-contained installable bundle without extension runtim
     expect(script).not.toMatch(/chrome\.runtime|browser\.runtime|__UPLOAD_TIMEOUT_MS__/);
     expect(script).toContain("insertText");
     expect(script).toContain("Preview links in chat");
-    expect(script).toContain("Sign-in requires the Chrome or Firefox extension");
-    expect(script).not.toContain("twirOAuthSession");
-    expect(script).not.toContain("/oauth/token");
+    expect(script).toContain("twirOAuthSession");
+    expect(script).toContain("twirOAuthCallback");
+    expect(script).toContain("https://twir.app/api/oauth");
     expect(script).not.toContain("/oauth/register");
-    expect(script).not.toContain(TWIR_CLIENT_ID);
+    expect(script).toContain(TWIR_CLIENT_ID);
+    expect(script).toContain(USERSCRIPT_REDIRECT_URI);
     expect(script).not.toContain("@require");
     expect(script).not.toMatch(/^\s*(?:import|export)\s/m);
 

@@ -7,7 +7,7 @@ export const TWIR_CLIENT_ID = "ZpsvaPsnURNKY-cBtc-aXAjf4ek6GGZyovQ0ZdMbE2U";
 export const TWIR_RESOURCE = "https://twir.app/api";
 export const TWIR_SCOPE = "files:edit";
 const REQUEST_TIMEOUT = 15_000;
-const ATTEMPT_LIFETIME = 10 * 60_000;
+export const AUTH_ATTEMPT_LIFETIME = 10 * 60_000;
 const RECONNECT = "Your Twir connection has expired. Reconnect Twir in Settings → Accounts.";
 
 export interface OAuthClient {
@@ -288,7 +288,7 @@ export function createTwirAuth({
         state: randomSecret(),
         verifier: randomSecret(),
         client,
-        expiresAt: now() + ATTEMPT_LIFETIME,
+        expiresAt: now() + AUTH_ATTEMPT_LIFETIME,
       };
       await store.writeSession({ ...session, attempt: pending });
       return pending;

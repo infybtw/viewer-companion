@@ -774,186 +774,158 @@ async function checkClipboard() {
 
 async function checkAccounts() {
   const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-  for (const supported of [false, true]) {
-    await check(
-      `Accounts: ${supported ? "extension connection states and recovery" : "userscript explains unavailable sign-in"}`,
-      async () => {
-        document.body.replaceChildren();
-        const settings = createSettings({ load: () => ({}), save: () => {} });
-        await settings.ready;
-        const nav = document.createElement("nav");
-        nav.innerHTML = '<button data-a-target="user-menu-toggle">Account</button>';
-        document.body.append(nav);
-        let status: TwirAccountStatus = "disconnected";
-        let offline = false;
-        let failConnect = false;
-        let connectCount = 0;
-        let pending: ReturnType<typeof Promise.withResolvers<void>> | undefined;
-        const accounts: Accounts = {
-          async status() {
-            return status;
-          },
-          async connect() {
-            connectCount++;
-            if (failConnect)
-              throw new Error(
-                "Twir sign-in failed (browser): Authorization page could not be loaded.",
-              );
-            status = "connecting";
-            if (pending) await pending.promise;
-            else status = "connected";
-          },
-          async disconnect() {
-            status = "disconnected";
-            return { revoked: !offline };
-          },
-        };
-        const stop = registerSettingsUi(
-          settings,
-          "www.twitch.tv",
-          supported ? accounts : undefined,
-        );
-        try {
-          document
-            .querySelector(`[${SETTINGS_BUTTON_ATTRIBUTE}]`)!
-            .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-            .click();
-          const root = document.querySelector(`[${SETTINGS_PANEL_ATTRIBUTE}]`)!.shadowRoot!;
-          const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-          tabs.find((tab) => tab.textContent === "Accounts")!.click();
-          await tick();
-          const panel = root.querySelector<HTMLElement>("#settings-panel-accounts")!;
-          assert(
-            !panel.hidden && panel.textContent!.includes("Twir"),
-            "Accounts tab is missing Twir",
-          );
-          assert(
-            panel.querySelector(".accounts-beta")?.textContent === "Sign-in is in beta.",
-            "account sign-in is not marked as beta",
-          );
-          assert(
-            getComputedStyle(panel.querySelector("#twir-account-title")!).fontSize === "18px",
-            "Twir title is not enlarged",
-          );
-          assert(
-            panel.firstElementChild?.className === "accounts-beta" &&
-              panel.querySelector(".accounts-beta")!.nextElementSibling?.className === "account" &&
-              panel.querySelector(".accounts-beta")!.getBoundingClientRect().bottom <=
-                panel.querySelector("#twir-account-title")!.getBoundingClientRect().top,
-            "beta notice must be global to Accounts and above Twir",
-          );
-          assert(
-            panel.querySelector('.accounts-beta svg[aria-hidden="true"] path') &&
-              getComputedStyle(panel.querySelector(".accounts-beta")!).backgroundColor.startsWith(
-                "rgba(",
-              ),
-            "beta notice needs a warning icon and translucent background",
-          );
-          assert(
-            root.querySelector<HTMLElement>(".note")!.hidden,
-            "settings hint clutters Accounts",
-          );
-          tabs.find((tab) => tab.textContent === "General")!.click();
-          assert(
-            !root.querySelector<HTMLElement>(".note")!.hidden,
-            "settings hint missing in General",
-          );
-          tabs.find((tab) => tab.textContent === "Accounts")!.click();
-          if (!supported) {
-            assert(
-              panel.textContent!.includes("Sign-in requires the Chrome or Firefox extension"),
-              "userscript limitation is not explained",
-            );
-            assert(!panel.querySelector("button"), "userscript offers nonfunctional sign-in");
-            return;
-          }
-          const connect = panel.querySelector<HTMLButtonElement>(".primary")!;
-          const disconnect = panel.querySelector<HTMLButtonElement>(".action:not(.primary)")!;
-          assert(
-            connect.textContent === "Sign in" && !connect.disabled && disconnect.hidden,
-            "incorrect disconnected state",
-          );
-          assert(
-            panel.textContent === "Sign-in is in beta.TwirSign inSign out",
-            "redundant account explanations remain",
-          );
-          assert(
-            [...panel.querySelectorAll<HTMLElement>(".status")].every(
-              (element) => element.getClientRects().length === 0,
-            ),
-            "empty account statuses take up space",
-          );
-          failConnect = true;
-          connect.click();
-          await tick();
-          assert(
-            panel.textContent!.includes(
-              "Twir sign-in failed (browser): Authorization page could not be loaded.",
-            ) && !connect.disabled,
-            "sign-in error prevents retry",
-          );
-          failConnect = false;
-          connect.click();
-          await tick();
-          assert(
-            connect.hidden && !disconnect.hidden && panel.textContent!.includes("Signed in"),
-            "successful connection not shown",
-          );
-          offline = true;
-          disconnect.click();
-          await tick();
-          assert(
-            !connect.hidden && panel.textContent!.includes("Revoke access in Twir"),
-            "offline logout was not explained",
-          );
-          status = "reconnect-required";
-          // Reopening reads fresh background state without storing account data in settings.
-          root.querySelector<HTMLButtonElement>('[aria-label="Close settings"]')!.click();
-          document
-            .querySelector(`[${SETTINGS_BUTTON_ATTRIBUTE}]`)!
-            .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-            .click();
-          const reopened = document.querySelector(`[${SETTINGS_PANEL_ATTRIBUTE}]`)!.shadowRoot!;
-          reopened.querySelector<HTMLButtonElement>("#settings-tab-accounts")!.click();
-          await tick();
-          const reconnect = reopened.querySelector<HTMLButtonElement>(
-            "#settings-panel-accounts .primary",
-          )!;
-          assert(
-            reconnect.textContent === "Sign in again" &&
-              reopened.textContent!.includes("Uploads paused until you sign in again"),
-            "expired connection has no recovery",
-          );
-          pending = Promise.withResolvers<void>();
-          reconnect.click();
-          await tick();
-          const cancel = reopened.querySelector<HTMLButtonElement>(
-            "#settings-panel-accounts .action:not(.primary)",
-          )!;
-          assert(
-            cancel.textContent === "Cancel sign-in" && !cancel.disabled,
-            "pending sign-in cannot be canceled",
-          );
-          cancel.click();
-          await tick();
-          pending.reject(new Error("Old sign-in was canceled"));
-          await tick();
-          assert(
-            !reopened.textContent!.includes("Old sign-in"),
-            "late sign-in callback overwrote logout feedback",
-          );
-          assert(connectCount === 3, "unexpected number of sign-in requests");
-          assert(
-            !JSON.stringify(settings.get()).includes("Twir"),
-            "account credentials entered settings",
-          );
-        } finally {
-          stop();
-          nav.remove();
-        }
+  await check("Accounts: connection states and recovery", async () => {
+    document.body.replaceChildren();
+    const settings = createSettings({ load: () => ({}), save: () => {} });
+    await settings.ready;
+    const nav = document.createElement("nav");
+    nav.innerHTML = '<button data-a-target="user-menu-toggle">Account</button>';
+    document.body.append(nav);
+    let status: TwirAccountStatus = "disconnected";
+    let offline = false;
+    let failConnect = false;
+    let connectCount = 0;
+    let pending: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+    const accounts: Accounts = {
+      async status() {
+        return status;
       },
-    );
-  }
+      async connect() {
+        connectCount++;
+        if (failConnect)
+          throw new Error("Twir sign-in failed (browser): Authorization page could not be loaded.");
+        status = "connecting";
+        if (pending) await pending.promise;
+        else status = "connected";
+      },
+      async disconnect() {
+        status = "disconnected";
+        return { revoked: !offline };
+      },
+    };
+    const stop = registerSettingsUi(settings, "www.twitch.tv", accounts);
+    try {
+      document
+        .querySelector(`[${SETTINGS_BUTTON_ATTRIBUTE}]`)!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+        .click();
+      const root = document.querySelector(`[${SETTINGS_PANEL_ATTRIBUTE}]`)!.shadowRoot!;
+      const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+      tabs.find((tab) => tab.textContent === "Accounts")!.click();
+      await tick();
+      const panel = root.querySelector<HTMLElement>("#settings-panel-accounts")!;
+      assert(!panel.hidden && panel.textContent!.includes("Twir"), "Accounts tab is missing Twir");
+      assert(
+        panel.querySelector(".accounts-beta")?.textContent === "Sign-in is in beta.",
+        "account sign-in is not marked as beta",
+      );
+      assert(
+        getComputedStyle(panel.querySelector("#twir-account-title")!).fontSize === "18px",
+        "Twir title is not enlarged",
+      );
+      assert(
+        panel.firstElementChild?.className === "accounts-beta" &&
+          panel.querySelector(".accounts-beta")!.nextElementSibling?.className === "account" &&
+          panel.querySelector(".accounts-beta")!.getBoundingClientRect().bottom <=
+            panel.querySelector("#twir-account-title")!.getBoundingClientRect().top,
+        "beta notice must be global to Accounts and above Twir",
+      );
+      assert(
+        panel.querySelector('.accounts-beta svg[aria-hidden="true"] path') &&
+          getComputedStyle(panel.querySelector(".accounts-beta")!).backgroundColor.startsWith(
+            "rgba(",
+          ),
+        "beta notice needs a warning icon and translucent background",
+      );
+      assert(root.querySelector<HTMLElement>(".note")!.hidden, "settings hint clutters Accounts");
+      tabs.find((tab) => tab.textContent === "General")!.click();
+      assert(!root.querySelector<HTMLElement>(".note")!.hidden, "settings hint missing in General");
+      tabs.find((tab) => tab.textContent === "Accounts")!.click();
+      const connect = panel.querySelector<HTMLButtonElement>(".primary")!;
+      const disconnect = panel.querySelector<HTMLButtonElement>(".action:not(.primary)")!;
+      assert(
+        connect.textContent === "Sign in" && !connect.disabled && disconnect.hidden,
+        "incorrect disconnected state",
+      );
+      assert(
+        panel.textContent === "Sign-in is in beta.TwirSign inSign out",
+        "redundant account explanations remain",
+      );
+      assert(
+        [...panel.querySelectorAll<HTMLElement>(".status")].every(
+          (element) => element.getClientRects().length === 0,
+        ),
+        "empty account statuses take up space",
+      );
+      failConnect = true;
+      connect.click();
+      await tick();
+      assert(
+        panel.textContent!.includes(
+          "Twir sign-in failed (browser): Authorization page could not be loaded.",
+        ) && !connect.disabled,
+        "sign-in error prevents retry",
+      );
+      failConnect = false;
+      connect.click();
+      await tick();
+      assert(
+        connect.hidden && !disconnect.hidden && panel.textContent!.includes("Signed in"),
+        "successful connection not shown",
+      );
+      offline = true;
+      disconnect.click();
+      await tick();
+      assert(
+        !connect.hidden && panel.textContent!.includes("Revoke access in Twir"),
+        "offline logout was not explained",
+      );
+      status = "reconnect-required";
+      // Reopening reads fresh background state without storing account data in settings.
+      root.querySelector<HTMLButtonElement>('[aria-label="Close settings"]')!.click();
+      document
+        .querySelector(`[${SETTINGS_BUTTON_ATTRIBUTE}]`)!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+        .click();
+      const reopened = document.querySelector(`[${SETTINGS_PANEL_ATTRIBUTE}]`)!.shadowRoot!;
+      reopened.querySelector<HTMLButtonElement>("#settings-tab-accounts")!.click();
+      await tick();
+      const reconnect = reopened.querySelector<HTMLButtonElement>(
+        "#settings-panel-accounts .primary",
+      )!;
+      assert(
+        reconnect.textContent === "Sign in again" &&
+          reopened.textContent!.includes("Uploads paused until you sign in again"),
+        "expired connection has no recovery",
+      );
+      pending = Promise.withResolvers<void>();
+      reconnect.click();
+      await tick();
+      const cancel = reopened.querySelector<HTMLButtonElement>(
+        "#settings-panel-accounts .action:not(.primary)",
+      )!;
+      assert(
+        cancel.textContent === "Cancel sign-in" && !cancel.disabled,
+        "pending sign-in cannot be canceled",
+      );
+      cancel.click();
+      await tick();
+      pending.reject(new Error("Old sign-in was canceled"));
+      await tick();
+      assert(
+        !reopened.textContent!.includes("Old sign-in"),
+        "late sign-in callback overwrote logout feedback",
+      );
+      assert(connectCount === 3, "unexpected number of sign-in requests");
+      assert(
+        !JSON.stringify(settings.get()).includes("Twir"),
+        "account credentials entered settings",
+      );
+    } finally {
+      stop();
+      nav.remove();
+    }
+  });
   await check(
     "Accounts: failed status checks do not block sign-in or replace action feedback",
     async () => {
